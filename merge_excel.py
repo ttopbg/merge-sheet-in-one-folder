@@ -33,7 +33,7 @@ STANDARD_NAMES = {
     "ngay_sinh": "Ngày sinh",
 }
 
-PRIORITY_COLS = ["Họ và tên", "Lớp", "Giới tính", "Ngày sinh"]
+PRIORITY_COLS = ["Họ và tên", "Lớp", "Giới tính", "Ngày sinh", "Lớp_gộp"]
 REQUIRED_COLS = {"lop", "ho_ten", "ngay_sinh"}
 HEADER_SCAN_ROWS = 10
 
@@ -103,7 +103,7 @@ def _format_date(val) -> str:
         return s
 
 
-def extract_sheet(df_raw: pd.DataFrame, sheet_name: str) -> pd.DataFrame | None:
+def extract_sheet(df_raw: pd.DataFrame, file_name: str) -> pd.DataFrame | None:
     header_idx = _detect_header_row(df_raw)
     if header_idx is None:
         return None
@@ -118,6 +118,9 @@ def extract_sheet(df_raw: pd.DataFrame, sheet_name: str) -> pd.DataFrame | None:
     data_rows = df_raw.iloc[header_idx + 1:].reset_index(drop=True)
     mapped_indices = set(col_map.values())
 
+    # Tên file bỏ phần đuôi để dùng làm Lớp_gộp
+    lop_gop_val = file_name.rsplit(".", 1)[0]
+
     records = []
     for _, row in data_rows.iterrows():
         ho_ten_val = str(row.iloc[col_map["ho_ten"]]).strip()
@@ -126,12 +129,13 @@ def extract_sheet(df_raw: pd.DataFrame, sheet_name: str) -> pd.DataFrame | None:
 
         record = {
             STANDARD_NAMES["ho_ten"]:    ho_ten_val,
-            STANDARD_NAMES["lop"]:       sheet_name,
+            STANDARD_NAMES["lop"]:       str(row.iloc[col_map["lop"]]).strip(),
             STANDARD_NAMES["gioi_tinh"]: (
                 str(row.iloc[col_map["gioi_tinh"]]).strip()
                 if "gioi_tinh" in col_map else ""
             ),
             STANDARD_NAMES["ngay_sinh"]: _format_date(row.iloc[col_map["ngay_sinh"]]),
+            "Lớp_gộp":                   lop_gop_val,
         }
 
         # Giữ các cột gốc khác
@@ -170,7 +174,7 @@ def merge_excel_files(uploaded_files: list) -> tuple[pd.DataFrame, list[str]]:
                     BytesIO(raw_bytes), sheet_name=sheet,
                     header=None, engine=engine,
                 )
-                result = extract_sheet(df_raw, sheet_name=sheet)
+                result = extract_sheet(df_raw, file_name=file_name)
                 label = f"{file_name} › {sheet}"
                 if result is not None and not result.empty:
                     frames.append(result)
