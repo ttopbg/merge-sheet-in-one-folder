@@ -3,8 +3,8 @@ import pandas as pd
 from merge_excel import merge_excel_files, to_excel_bytes
 
 st.set_page_config(
-    page_title="Gộp danh sách học sinh",
-    page_icon="📚",
+    page_title="Gộp HS trong Folder",
+    page_icon="🐍",
     layout="centered",
 )
 
@@ -28,7 +28,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ─── Tiêu đề ─────────────────────────────────────────────────────────────────
-st.title("📚 Gộp danh sách học sinh")
+st.title("🎲 Gộp học sinh từ nhiều file trong một Folder")
 st.markdown(
     "Upload nhiều file Excel (`.xlsx`, `.xls`, `.xlsm`). "
     "Ứng dụng tự nhận diện cột **Lớp**, **Họ và tên**, **Ngày sinh** "
