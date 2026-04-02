@@ -4,50 +4,63 @@ from io import BytesIO
 
 # ─── Ánh xạ tên cột chuẩn ───────────────────────────────────────────────────
 COLUMN_ALIASES = {
-    "lop": ["lớp", "lop", "lớp học", "lop hoc", "class", "khối lớp", "khoi lop"],
+    "lop": [
+        "lớp", "lop", "lớp học", "lop hoc", "class",
+        "khối lớp", "khoi lop", "lớp/class",
+    ],
     "ho_ten": [
-        "họ tên", "ho ten", "họ và tên", "ho va ten", "tên", "ten",
-        "full name", "name", "họ tên học sinh", "ho ten hoc sinh",
-        "tên học sinh", "ten hoc sinh",
+        "họ tên", "ho ten", "họ và tên", "ho va ten",
+        "tên", "ten", "full name", "name",
+        "họ tên học sinh", "ho ten hoc sinh",
+        "tên học sinh", "ten hoc sinh", "họ tên hs",
     ],
     "ngay_sinh": [
-        "ngày sinh", "ngay sinh", "ngày tháng năm sinh", "ngay thang nam sinh",
+        "ngày sinh", "ngay sinh",
+        "ngày tháng năm sinh", "ngay thang nam sinh",
         "dob", "date of birth", "năm sinh", "nam sinh",
+        "ngày/tháng/năm sinh",
+    ],
+    "gioi_tinh": [
+        "giới tính", "gioi tinh", "gender", "sex",
+        "gt", "phái", "phai",
     ],
 }
 
 STANDARD_NAMES = {
-    "lop": "Lớp",
-    "ho_ten": "Họ và tên",
+    "ho_ten":    "Họ và tên",
+    "lop":       "Lớp",
+    "gioi_tinh": "Giới tính",
     "ngay_sinh": "Ngày sinh",
 }
 
+PRIORITY_COLS = ["Họ và tên", "Lớp", "Giới tính", "Ngày sinh"]
 REQUIRED_COLS = {"lop", "ho_ten", "ngay_sinh"}
+HEADER_SCAN_ROWS = 10
 
 
 def _normalize(text: str) -> str:
-    """Chuẩn hoá chuỗi: lowercase, bỏ dấu cơ bản, trim."""
     text = str(text).strip().lower()
-    # bỏ dấu tiếng Việt đơn giản bằng regex (không cần unidecode)
     replacements = [
         (r"[àáâãäåạảấầẩẫậắằẳẵặ]", "a"),
-        (r"[èéêëẹẻẽếềểễệ]", "e"),
-        (r"[ìíîïịỉĩ]", "i"),
-        (r"[òóôõöọỏốồổỗộớờởỡợ]", "o"),
-        (r"[ùúûüụủũứừửữự]", "u"),
-        (r"[ỳýỹỵỷ]", "y"),
-        (r"[đ]", "d"),
+        (r"[èéêëẹẻẽếềểễệ]",       "e"),
+        (r"[ìíîïịỉĩ]",             "i"),
+        (r"[òóôõöọỏốồổỗộớờởỡợ]",  "o"),
+        (r"[ùúûüụủũứừửữự]",        "u"),
+        (r"[ỳýỹỵỷ]",               "y"),
+        (r"[đ]",                   "d"),
     ]
     for pat, rep in replacements:
         text = re.sub(pat, rep, text)
+    text = re.sub(r"[^\w\s]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
 def _detect_header_row(df_raw: pd.DataFrame) -> int | None:
-    """Tìm dòng header (dòng chứa ít nhất 2 trong 3 cột cần thiết)."""
     all_aliases = {k: [_normalize(a) for a in v] for k, v in COLUMN_ALIASES.items()}
-
-    for i, row in df_raw.iterrows():
+    scan_limit = min(HEADER_SCAN_ROWS, len(df_raw))
+    for i in range(scan_limit):
+        row = df_raw.iloc[i]
         row_vals = [_normalize(str(c)) for c in row.values]
         found = set()
         for std_key, aliases in all_aliases.items():
@@ -55,13 +68,12 @@ def _detect_header_row(df_raw: pd.DataFrame) -> int | None:
                 if val in aliases:
                     found.add(std_key)
                     break
-        if len(found) >= 2:
+        if len(found & REQUIRED_COLS) >= 2:
             return i
     return None
 
 
 def _map_columns(header_row: pd.Series) -> dict:
-    """Trả về {std_key: col_index} từ dòng header."""
     all_aliases = {k: [_normalize(a) for a in v] for k, v in COLUMN_ALIASES.items()}
     mapping = {}
     for col_idx, cell in enumerate(header_row):
@@ -72,8 +84,26 @@ def _map_columns(header_row: pd.Series) -> dict:
     return mapping
 
 
-def extract_sheet(df_raw: pd.DataFrame, source_label: str) -> pd.DataFrame | None:
-    """Trích xuất dữ liệu từ 1 sheet thô."""
+def _format_date(val) -> str:
+    if pd.isnull(val) if not isinstance(val, str) else False:
+        return ""
+    s = str(val).strip()
+    if s.lower() in ("", "nan", "none", "nat"):
+        return ""
+    if isinstance(val, pd.Timestamp):
+        return val.strftime("%d/%m/%Y")
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y", "%Y/%m/%d"):
+        try:
+            return pd.to_datetime(s, format=fmt).strftime("%d/%m/%Y")
+        except Exception:
+            pass
+    try:
+        return pd.to_datetime(s, dayfirst=True).strftime("%d/%m/%Y")
+    except Exception:
+        return s
+
+
+def extract_sheet(df_raw: pd.DataFrame, sheet_name: str) -> pd.DataFrame | None:
     header_idx = _detect_header_row(df_raw)
     if header_idx is None:
         return None
@@ -81,35 +111,46 @@ def extract_sheet(df_raw: pd.DataFrame, source_label: str) -> pd.DataFrame | Non
     header_row = df_raw.iloc[header_idx]
     col_map = _map_columns(header_row)
 
-    # Phải có đủ 3 cột mới lấy
     if not REQUIRED_COLS.issubset(col_map.keys()):
         return None
 
-    data_rows = df_raw.iloc[header_idx + 1 :].reset_index(drop=True)
+    original_col_names = list(header_row.values)
+    data_rows = df_raw.iloc[header_idx + 1:].reset_index(drop=True)
+    mapped_indices = set(col_map.values())
 
     records = []
     for _, row in data_rows.iterrows():
         ho_ten_val = str(row.iloc[col_map["ho_ten"]]).strip()
-        # Bỏ dòng trống / dòng tổng hợp
         if not ho_ten_val or ho_ten_val.lower() in ("nan", "", "none"):
             continue
 
         record = {
-            STANDARD_NAMES["lop"]: row.iloc[col_map["lop"]],
-            STANDARD_NAMES["ho_ten"]: ho_ten_val,
-            STANDARD_NAMES["ngay_sinh"]: row.iloc[col_map["ngay_sinh"]],
-            "Nguồn": source_label,
+            STANDARD_NAMES["ho_ten"]:    ho_ten_val,
+            STANDARD_NAMES["lop"]:       sheet_name,
+            STANDARD_NAMES["gioi_tinh"]: (
+                str(row.iloc[col_map["gioi_tinh"]]).strip()
+                if "gioi_tinh" in col_map else ""
+            ),
+            STANDARD_NAMES["ngay_sinh"]: _format_date(row.iloc[col_map["ngay_sinh"]]),
         }
+
+        # Giữ các cột gốc khác
+        for ci, orig_name in enumerate(original_col_names):
+            if ci in mapped_indices:
+                continue
+            col_label = str(orig_name).strip()
+            if col_label.lower() in ("nan", "", "none"):
+                col_label = f"Cột_{ci}"
+            if col_label in PRIORITY_COLS:
+                col_label = f"{col_label}_gốc"
+            record[col_label] = row.iloc[ci]
+
         records.append(record)
 
     return pd.DataFrame(records) if records else None
 
 
 def merge_excel_files(uploaded_files: list) -> tuple[pd.DataFrame, list[str]]:
-    """
-    Nhận list các file object (có .name và .read()),
-    trả về (DataFrame tổng hợp, danh sách log).
-    """
     logs = []
     frames = []
 
@@ -118,17 +159,19 @@ def merge_excel_files(uploaded_files: list) -> tuple[pd.DataFrame, list[str]]:
         try:
             raw_bytes = uploaded_file.read()
             ext = file_name.rsplit(".", 1)[-1].lower()
+            engine = "openpyxl" if ext in ("xlsx", "xlsm") else "xlrd"
 
-            # Đọc tất cả sheet
-            xls = pd.ExcelFile(BytesIO(raw_bytes), engine="openpyxl" if ext in ("xlsx", "xlsm") else "xlrd")
+            xls = pd.ExcelFile(BytesIO(raw_bytes), engine=engine)
             sheet_names = xls.sheet_names
 
             file_got_data = False
             for sheet in sheet_names:
-                df_raw = pd.read_excel(BytesIO(raw_bytes), sheet_name=sheet, header=None,
-                                       engine="openpyxl" if ext in ("xlsx", "xlsm") else "xlrd")
-                label = f"{file_name} | {sheet}"
-                result = extract_sheet(df_raw, label)
+                df_raw = pd.read_excel(
+                    BytesIO(raw_bytes), sheet_name=sheet,
+                    header=None, engine=engine,
+                )
+                result = extract_sheet(df_raw, sheet_name=sheet)
+                label = f"{file_name} › {sheet}"
                 if result is not None and not result.empty:
                     frames.append(result)
                     logs.append(f"✅ {label}: {len(result)} học sinh")
@@ -142,15 +185,25 @@ def merge_excel_files(uploaded_files: list) -> tuple[pd.DataFrame, list[str]]:
         except Exception as e:
             logs.append(f"❌ {file_name}: lỗi – {e}")
 
-    if frames:
-        merged = pd.concat(frames, ignore_index=True)
-        merged = merged.drop_duplicates(subset=[STANDARD_NAMES["ho_ten"], STANDARD_NAMES["ngay_sinh"]])
-        return merged, logs
-    else:
+    if not frames:
         return pd.DataFrame(), logs
+
+    merged = pd.concat(frames, ignore_index=True)
+    merged = merged.drop_duplicates(
+        subset=[STANDARD_NAMES["ho_ten"], STANDARD_NAMES["ngay_sinh"]]
+    )
+
+    # Sắp xếp cột: 4 ưu tiên trước, còn lại giữ nguyên
+    existing_priority = [c for c in PRIORITY_COLS if c in merged.columns]
+    other_cols = [c for c in merged.columns if c not in PRIORITY_COLS]
+    merged = merged[existing_priority + other_cols]
+
+    return merged, logs
 
 
 def to_excel_bytes(df: pd.DataFrame) -> bytes:
+    """Xuất toàn bộ dữ liệu vào 1 sheet duy nhất tên 'Tổng hợp'.
+    Cột 'Lớp' chứa tên sheet gốc của file input (đã gán lúc extract)."""
     buf = BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Tổng hợp")
