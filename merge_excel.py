@@ -33,8 +33,8 @@ STANDARD_NAMES = {
     "ngay_sinh": "Ngày sinh",
 }
 
-PRIORITY_COLS = ["Họ và tên", "Lớp", "Giới tính", "Ngày sinh", "Lớp_gộp"]
-REQUIRED_COLS = {"lop", "ho_ten", "ngay_sinh"}
+PRIORITY_COLS = ["Họ và tên", "Lớp_gộp", "Giới tính", "Ngày sinh", "Lớp"]
+REQUIRED_COLS = {"ho_ten"}
 HEADER_SCAN_ROWS = 10
 
 
