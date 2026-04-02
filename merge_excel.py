@@ -68,7 +68,7 @@ def _detect_header_row(df_raw: pd.DataFrame) -> int | None:
                 if val in aliases:
                     found.add(std_key)
                     break
-        if len(found & REQUIRED_COLS) >= 0:
+        if len(found & REQUIRED_COLS) >= 1:
             return i
     return None
 
