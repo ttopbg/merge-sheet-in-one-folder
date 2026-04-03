@@ -33,8 +33,8 @@ STANDARD_NAMES = {
     "ngay_sinh": "Ngày sinh",
 }
 
-PRIORITY_COLS = ["Họ và tên", "Lớp_gộp", "Giới tính", "Ngày sinh", "Lớp"]
-REQUIRED_COLS = {"ho_ten"}
+PRIORITY_COLS = ["Họ và tên", "Lớp", "Giới tính", "Ngày sinh", "Lớp_gộp"]
+REQUIRED_COLS = {"ho_ten"}  # Chỉ cần cột Họ và tên; các cột khác có thì lấy, không có để trống
 HEADER_SCAN_ROWS = 10
 
 
@@ -121,20 +121,24 @@ def extract_sheet(df_raw: pd.DataFrame, file_name: str) -> pd.DataFrame | None:
     # Tên file bỏ phần đuôi để dùng làm Lớp_gộp
     lop_gop_val = file_name.rsplit(".", 1)[0]
 
+    def _get(row, key):
+        if key not in col_map:
+            return ""
+        return str(row.iloc[col_map[key]]).strip()
+
     records = []
     for _, row in data_rows.iterrows():
-        ho_ten_val = str(row.iloc[col_map["ho_ten"]]).strip()
+        ho_ten_val = _get(row, "ho_ten")
         if not ho_ten_val or ho_ten_val.lower() in ("nan", "", "none"):
             continue
 
+        ngay_sinh_raw = row.iloc[col_map["ngay_sinh"]] if "ngay_sinh" in col_map else ""
+
         record = {
             STANDARD_NAMES["ho_ten"]:    ho_ten_val,
-            STANDARD_NAMES["lop"]:       str(row.iloc[col_map["lop"]]).strip(),
-            STANDARD_NAMES["gioi_tinh"]: (
-                str(row.iloc[col_map["gioi_tinh"]]).strip()
-                if "gioi_tinh" in col_map else ""
-            ),
-            STANDARD_NAMES["ngay_sinh"]: _format_date(row.iloc[col_map["ngay_sinh"]]),
+            STANDARD_NAMES["lop"]:       _get(row, "lop"),
+            STANDARD_NAMES["gioi_tinh"]: _get(row, "gioi_tinh"),
+            STANDARD_NAMES["ngay_sinh"]: _format_date(ngay_sinh_raw) if ngay_sinh_raw != "" else "",
             "Lớp_gộp":                   lop_gop_val,
         }
 
