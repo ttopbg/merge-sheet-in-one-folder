@@ -35,7 +35,7 @@ STANDARD_NAMES = {
 
 PRIORITY_COLS = ["Họ và tên", "Lớp", "Giới tính", "Ngày sinh", "Lớp_gộp"]
 REQUIRED_COLS = {"ho_ten"}  # Chỉ cần cột Họ và tên; các cột khác có thì lấy, không có để trống
-HEADER_SCAN_ROWS = 10
+HEADER_SCAN_ROWS = 1
 
 
 def _normalize(text: str) -> str:
