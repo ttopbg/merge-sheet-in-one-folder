@@ -31,8 +31,9 @@ st.markdown("""
 st.title("🎲 Gộp học sinh từ nhiều file trong một Folder")
 st.markdown(
     "Upload nhiều file Excel (`.xlsx`, `.xls`, `.xlsm`). "
-    "Ứng dụng tự nhận diện cột **Lớp**, **Họ và tên**, **Ngày sinh** "
-    "rồi gộp tất cả thành một file duy nhất."
+    "Ứng dụng tự bỏ qua phần tiêu đề trang (UBND, tên trường, \"DANH SÁCH…\"), "
+    "tìm dòng tiêu đề bảng, nhận diện cột **Họ và tên**, **Giới tính**, **Ngày sinh** "
+    "rồi gộp tất cả thành một file duy nhất. Cột **Lớp** lấy theo **tên file**."
 )
 
 # ─── Upload ──────────────────────────────────────────────────────────────────
@@ -69,7 +70,7 @@ if uploaded_files:
         if merged_df.empty:
             st.error("Không tìm thấy dữ liệu hợp lệ trong các file đã upload.")
         else:
-            st.success(f"✅ Tổng cộng **{len(merged_df)}** học sinh sau khi gộp và loại trùng.")
+            st.success(f"✅ Tổng cộng **{len(merged_df)}** học sinh sau khi gộp (không loại trùng).")
 
             # Xem trước
             st.markdown("**Xem trước dữ liệu:**")
@@ -96,7 +97,8 @@ else:
 # ─── Footer ──────────────────────────────────────────────────────────────────
 st.divider()
 st.caption(
-    "Cột được nhận diện tự động: **Lớp** (Lớp học, Class…) · "
-    "**Họ và tên** (Tên, Full name…) · **Ngày sinh** (Ngày tháng năm sinh, DOB…). "
-    "Dữ liệu trùng (cùng họ tên + ngày sinh) sẽ được loại bỏ."
+    "Cột được nhận diện tự động: **Họ và tên** (Họ tên, Tên, Full name…) · "
+    "**Giới tính** · **Ngày sinh** (Ngày tháng năm sinh, DOB…). "
+    "**Lớp** = tên file đầu vào (cột Lớp có sẵn trong file được giữ ở cột *Lớp_gốc*). "
+    "Giữ nguyên toàn bộ dữ liệu, không lọc hay xoá dòng trùng."
 )
